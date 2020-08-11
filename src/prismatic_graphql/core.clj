@@ -1,7 +1,8 @@
 (ns prismatic-graphql.core
   (:require [schema.core :as s]
             [alumbra.analyzer :as analyzer]
-            [alumbra.parser :as parser])
+            [alumbra.parser :as parser]
+            [clojure.java.io :as io])
   (:import [java.time LocalDateTime LocalDate LocalTime]))
 
 ;; Type Definitions
@@ -33,9 +34,12 @@
    :Time       LocalTime
    :DateTime   LocalDateTime})
 
+(def ^:private BaseGraphQLSchema "prismatic-graphql/BaseGraphQLSchema.graphql")
+
 (defn- parse-schema*
   [schema-string]
-  (analyzer/analyze-schema schema-string parser/parse-schema))
+  (->> {:base-schema (io/resource BaseGraphQLSchema)}
+       (analyzer/analyze-schema schema-string parser/parse-schema)))
 (def ^:private parse-schema (memoize parse-schema*))
 
 (defn- parse-query*
@@ -101,20 +105,23 @@
 
 (defn- resolve-type-name
   [base-schema type-name {:keys [type->kind unions interfaces]}]
-  (->> (cond
-         (= :interface (type->kind type-name))
-         (do
-           (assert (:__typename base-schema) "Interfaces Types Require __typename on query")
-           (apply s/enum (:implemented-by (get interfaces type-name))))
+  (cond
+    (= :interface (type->kind type-name))
+    (do
+      (assert (:__typename base-schema) "Interfaces Types Require __typename on query")
+      (->> (apply s/enum (:implemented-by (get interfaces type-name)))
+           (assoc base-schema :__typename)))
 
-         (= :union (type->kind type-name))
-         (do
-           (assert (:__typename base-schema) "Unions Types Require __typename on query")
-           (apply s/enum (:union-types (get unions type-name))))
+    (= :union (type->kind type-name))
+    (do
+      (assert (:__typename base-schema) "Unions Types Require __typename on query")
+      (->> (apply s/enum (:union-types (get unions type-name)))
+           (assoc base-schema :__typename)))
 
-         :else
-         (s/eq type-name))
-       (assoc base-schema :__typename)))
+    :else
+    (if (:__typename base-schema)
+      (assoc base-schema :__typename (s/eq type-name))
+      base-schema)))
 
 (defn- graphql-interfaces->schema
   [analyzed-schema base-schema interface-types options]

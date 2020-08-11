@@ -1,0 +1,16 @@
+# Scalars
+scalar Boolean
+scalar Float
+scalar ID
+scalar Int
+scalar String
+
+# Directives
+directive @skip (if: Boolean!) on FIELD | INLINE_FRAGMENT | FRAGMENT_SPREAD
+
+directive @include (if: Boolean!) on FIELD | INLINE_FRAGMENT | FRAGMENT_SPREAD
+
+directive @deprecated (reason: String) on FIELD_DEFINITION | ENUM_VALUE
+
+directive @doc (text: String!) on OBJECT| INTERFACE | UNION | ENUM | SCALAR | INPUT_OBJECT |
+  FIELD_DEFINITION | INPUT_FIELD_DEFINITION | ARGUMENT_DEFINITION
