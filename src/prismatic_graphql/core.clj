@@ -167,7 +167,26 @@
 (s/def default-options :- Options
   {:enum-fn #(apply s/enum %)})
 
+(s/defn valid-schema? :- s/Bool
+  "Returns true if the schema-string is a valid GraphQL Schema, false otherwise"
+  [schema-string :- s/Str]
+  (nil? (:alumbra/parser-errors (parse-schema schema-string))))
+
+(s/defn valid-query? :- s/Bool
+  "Returns true if the query-string is a syntactically correct GraphQL Query document, false otherwise. (this does no check if the query is compliant to a specific schema)"
+  [query-string :- s/Str]
+  (nil? (:alumbra/parser-errors (parse-query query-string))))
+
 (s/defn query->data-schema :- Schema
+  "Receives a string containing a GraphQL Schema in SDL and a GraphQL Query String and returns the Prismatic Schema of the
+   data response when executing the passed query against the provided schema. An optional `options` argument can be provided
+   with the following options:
+
+   <:scalars> - A map containing the Keyword representation of a custom GraphQL Scalar and the corresponding Prismatic Schema
+    type to be used. (this is required if your schema contains custom Scalars, they are going to be merged with the default ones)
+
+   <:enum-fn> - A function that receives a set and should return a Prismatic Schema representing an enum made of the elements
+    present in the set provided. By default this uses the `s/enum` from Prismatic, can be used to provide a loose-enum implementation."
   ([schema-string :- s/Str
     query-string :- s/Str]
    (query->data-schema schema-string query-string default-options))
@@ -182,6 +201,15 @@
              (reduce-schema schema (:selection-set $) (merge default-options options)))))))
 
 (s/defn query->variables-schema :- Schema
+  "Receives a string containing a GraphQL Schema in SDL and a GraphQL Query String and returns the Prismatic Schema of the
+   variables required when executing the passed query against the provided schema. An optional `options` argument can be provided
+   with the following options:
+
+   <:scalars> - A map containing the Keyword representation of a custom GraphQL Scalar and the corresponding Prismatic Schema
+    type to be used. (this is required if your schema contains custom Scalars, they are going to be merged with the default ones)
+
+   <:enum-fn> - A function that receives a set and should return a Prismatic Schema representing an enum made of the elements
+    present in the set provided. By default this uses the `s/enum` from Prismatic, can be used to provide a loose-enum implementation."
   ([schema-string :- s/Str
     query-string :- s/Str]
    (query->variables-schema schema-string query-string default-options))
