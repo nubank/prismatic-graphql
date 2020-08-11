@@ -1,0 +1,15 @@
+query firstOp($id: String) {
+    customer(id: $id) {
+        id
+        name
+    }
+}
+
+query secondOp {
+    person {
+        name
+        ... on Employee {
+            position
+        }
+    }
+}

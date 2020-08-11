@@ -227,5 +227,5 @@
              (let [type-name (-> var :alumbra/type :alumbra/type-name)
                    non-null? (-> var :alumbra/type :alumbra/non-null?)]
                (->> (nullability (graphql-type->schema-type schema type-name (merge default-options options)) non-null?)
-                    (assoc acc (:alumbra/variable-name var)))))
+                    (assoc acc (keyword (:alumbra/variable-name var))))))
            {})))))

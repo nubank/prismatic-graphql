@@ -1,0 +1,8 @@
+query employeeQuery($id: String!) {
+    employee(id: $id) {
+        id
+        name
+        organizationRole
+        requirePermission
+    }
+}

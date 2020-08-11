@@ -1,0 +1,6 @@
+mutation newPersonMutation($input: TestInput!) {
+    newPerson(input: $input) {
+        __typename
+        name
+    }
+}

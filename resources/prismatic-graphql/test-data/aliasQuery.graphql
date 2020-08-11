@@ -1,0 +1,6 @@
+query aliasQuery {
+    car {
+        manufacture: brand
+        model
+    }
+}

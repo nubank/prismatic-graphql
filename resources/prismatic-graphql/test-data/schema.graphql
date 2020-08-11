@@ -1,0 +1,68 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+scalar Keyword
+
+type Car {
+  brand: Keyword!
+  model: String!
+}
+
+interface Person {
+  id: ID!
+  name: String!
+}
+
+union Something = Person | Car
+
+input TestInput {
+  name: String!
+  age: Int!
+  tags: [String!]!
+}
+
+input CamelCaseInput {
+  loanId: String!
+  firstChargeDate: Int!
+  maxPrincipal: Int!
+}
+
+type Customer implements Person {
+  id: ID!
+  name: String!
+  age: Int!
+}
+
+type Employee implements Person {
+  id: ID!
+  name: String!
+  position: String!
+  organizationRole: String!
+  requirePermission: Boolean!
+}
+
+type Partner implements Person {
+  id: ID!
+  name: String!
+  role: String!
+}
+
+type Task {
+  name: String
+  tags: [String]!
+}
+
+type Query {
+  customer(id: String): Customer!
+  person(id: String): Person!
+  employee(id: String!): Employee!
+  task: Task!
+  car: Car!
+}
+
+type Mutation {
+  newPerson(input: TestInput!): Person!
+  newLoan(input: CamelCaseInput!): String
+}

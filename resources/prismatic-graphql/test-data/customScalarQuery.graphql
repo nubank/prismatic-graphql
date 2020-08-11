@@ -1,0 +1,6 @@
+query customScalarQuery {
+    car {
+        brand
+        model
+    }
+}

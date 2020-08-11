@@ -1,0 +1,3 @@
+mutation camelCaseInputMutation($input: CamelCaseInput!) {
+    newLoan(input: $input)
+}

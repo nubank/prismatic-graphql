@@ -1,0 +1,5 @@
+query invalidQuery{
+    wololo {
+        id
+    }
+}

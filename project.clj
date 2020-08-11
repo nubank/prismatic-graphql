@@ -7,4 +7,6 @@
                  [leoiacovini/alumbra.parser "0.1.8-SNAPSHOT"]
                  [prismatic/schema "1.1.11"]
                  [alumbra/validator "0.2.1"]
-                 [alumbra/analyzer "0.1.17"]])
+                 [alumbra/analyzer "0.1.17"]]
+
+  :profiles {:dev {:dependencies [[nubank/matcher-combinators "3.0.1"]]}})

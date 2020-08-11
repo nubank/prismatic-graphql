@@ -1,0 +1,13 @@
+query testQuery($id: String) {
+    customer(id: $id) {
+        id
+        name
+    }
+    person {
+        __typename
+        name
+        ... on Employee {
+            position
+        }
+    }
+}

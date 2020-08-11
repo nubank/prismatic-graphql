@@ -1,0 +1,16 @@
+query interfaceQuery($id: String) {
+    person(id: $id) {
+        __typename
+        id
+        name
+        ... on Customer {
+            age
+        }
+        ... on Employee {
+            position
+        }
+        ... on Partner {
+            role
+        }
+    }
+}

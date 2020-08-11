@@ -1,0 +1,6 @@
+query listQuery {
+    task {
+        name
+        tags
+    }
+}
