@@ -11,7 +11,7 @@ A Clojure library designed to create Prismatic Schemas from GraphQL query defini
 (def query (slurp "./my-graphql-query.graphql"))
 
 (prismatic.graphql/query->data-schema schema query)
-(prismatic.grapql/query->variables-schema schema query)
+(prismatic.graphql/query->variables-schema schema query)
 ```
 
 ## License

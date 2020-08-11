@@ -100,13 +100,21 @@
                   non-null?)]))
 
 (defn- resolve-type-name
-  [type-name {:keys [type->kind interfaces]}]
-  (cond
-    (= :interface (type->kind type-name))
-    (apply s/enum (:implemented-by (get interfaces type-name)))
+  [base-schema type-name {:keys [type->kind unions interfaces]}]
+  (->> (cond
+         (= :interface (type->kind type-name))
+         (do
+           (assert (:__typename base-schema) "Interfaces Types Require __typename on query")
+           (apply s/enum (:implemented-by (get interfaces type-name))))
 
-    :else
-    (s/eq type-name)))
+         (= :union (type->kind type-name))
+         (do
+           (assert (:__typename base-schema) "Unions Types Require __typename on query")
+           (apply s/enum (:union-types (get unions type-name))))
+
+         :else
+         (s/eq type-name))
+       (assoc base-schema :__typename)))
 
 (defn- graphql-interfaces->schema
   [analyzed-schema base-schema interface-types options]
@@ -115,7 +123,7 @@
           (mapcat
            (fn [[type-condition variation-type]]
              [(comp type-condition :__typename)
-              (merge (reduce-schema analyzed-schema (first variation-type) options)
+              (merge (reduce-schema analyzed-schema (:selection-set (first variation-type)) options)
                      base-schema)])
            interface-types)
           [:else base-schema])))
@@ -124,14 +132,14 @@
   [analyzed-schema {:keys [type-name selection-set]} options]
   (let [grouped-types   (group-by :type-condition selection-set)
         base-schema     (-> (reduce-schema analyzed-schema (get grouped-types nil) options)
-                            (assoc :__typename (resolve-type-name type-name analyzed-schema)))
+                            (resolve-type-name type-name analyzed-schema))
         interface-types (filter (comp some? key) grouped-types)]
     (if (seq interface-types)
       (graphql-interfaces->schema analyzed-schema base-schema interface-types options)
       base-schema)))
 
 (defn- reduce-schema
-  [analyzed-schema {:keys [selection-set]} options]
+  [analyzed-schema selection-set options]
   (reduce
    (fn [acc {:keys [field-type field-alias non-null? type-name] :as ca}]
      (-> (case field-type
@@ -161,7 +169,7 @@
      (with-redefs [alumbra.canonical.arguments/resolve-arguments (fn [_ _ _] nil)
                    alumbra.canonical.variables/resolve-variables (fn [opts _] opts)]
        (as-> (analyzer/canonicalize-operation schema query) $
-             (reduce-schema schema $ (merge default-options options)))))))
+             (reduce-schema schema (:selection-set $) (merge default-options options)))))))
 
 (defn query->variables-schema
   ([schema-string query-string]
