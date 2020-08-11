@@ -15,8 +15,8 @@
   (s/=> Schema [#{s/Any}]))
 
 (s/defschema Options
-  {:scalars ScalarMapping
-   :enum-fn EnumBuilder})
+  {(s/optional-key :scalars) ScalarMapping
+   (s/optional-key :enum-fn) EnumBuilder})
 
 ;; Internal
 
@@ -157,13 +157,16 @@
 
 ;; Public API
 
-(def default-options
+(s/def default-options :- Options
   {:enum-fn #(apply s/enum %)})
 
-(defn query->data-schema
-  ([schema-string query-string]
+(s/defn query->data-schema :- Schema
+  ([schema-string :- s/Str
+    query-string :- s/Str]
    (query->data-schema schema-string query-string default-options))
-  ([schema-string query-string options]
+  ([schema-string :- s/Str
+    query-string :- s/Str
+    options :- Options]
    (let [schema (parse-schema schema-string)
          query  (parse-query query-string)]
      (with-redefs [alumbra.canonical.arguments/resolve-arguments (fn [_ _ _] nil)
@@ -171,10 +174,13 @@
        (as-> (analyzer/canonicalize-operation schema query) $
              (reduce-schema schema (:selection-set $) (merge default-options options)))))))
 
-(defn query->variables-schema
-  ([schema-string query-string]
+(s/defn query->variables-schema :- Schema
+  ([schema-string :- s/Str
+    query-string :- s/Str]
    (query->variables-schema schema-string query-string default-options))
-  ([schema-string query-string options]
+  ([schema-string :- s/Str
+    query-string :- s/Str
+    options :- Options]
    (let [schema (parse-schema schema-string)
          query  (parse-query query-string)]
      (->> query
