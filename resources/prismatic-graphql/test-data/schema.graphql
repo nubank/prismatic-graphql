@@ -39,7 +39,7 @@ type Employee implements Person {
   id: ID!
   name: String!
   position: String!
-  organizationRole: String!
+  organizationRole: String! @deprecated(reason: "Do not use anymore")
   requirePermission: Boolean!
 }
 
@@ -58,6 +58,7 @@ type Query {
   customer(id: String): Customer!
   person(id: String): Person!
   employee(id: String!): Employee!
+  something: Something!
   task: Task!
   car: Car!
 }

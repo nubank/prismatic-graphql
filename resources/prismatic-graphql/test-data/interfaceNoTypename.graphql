@@ -1,0 +1,12 @@
+query interfaceNoTypeName($id: String) {
+  customer(id: $id) {
+    id
+    name
+  }
+  person {
+    name
+    ... on Employee {
+      position
+    }
+  }
+}

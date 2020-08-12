@@ -17,7 +17,7 @@
     (is (true? (core/valid-schema? schema))))
 
   (testing "it returns false to an invalid GraphQL schema"
-    (is (false? (core/valid-schema? "invalida schema")))))
+    (is (false? (core/valid-schema? "invalid schema")))))
 
 (deftest valid-query?-test
   (testing "it returns true to a valid GraphQL Query"
@@ -64,6 +64,14 @@
       (is (match? {:customer {:id s/Str :name s/Str}
                    :person   (partial instance? ConditionalSchema)}
                   (core/query->data-schema schema (load-query :testQuery) options))))
+
+    (testing "query with union result"
+      (is (match? {:something (partial instance? ConditionalSchema)}
+                  (core/query->data-schema schema (load-query :unionQuery) options))))
+
+    (testing "when doing an interface or union query it required asking the __typename"
+      (is (thrown-with-msg? AssertionError #"Assert failed: Unions and Interface Types Require __typename on query"
+                            (core/query->data-schema schema (load-query :interfaceNoTypename) options))))
 
     (testing "does not accept queries with two ops"
       (is (thrown-with-msg? IllegalArgumentException #"no operation name supplied"

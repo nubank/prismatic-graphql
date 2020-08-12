@@ -103,64 +103,77 @@
                     (graphql-type->schema-type as type-name options))
                   non-null?)]))
 
-(defn- resolve-type-name
-  [base-schema type-name {:keys [type->kind unions interfaces]}]
-  (cond
-    (= :interface (type->kind type-name))
-    (do
-      (assert (:__typename base-schema) "Interfaces Types Require __typename on query")
-      (->> (apply s/enum (:implemented-by (get interfaces type-name)))
-           (assoc base-schema :__typename)))
+(defn- resolve-into-concrete
+  [{:keys [type->kind unions interfaces] :as schema} type-name]
+  (case (type->kind type-name)
+    :interface (set (mapcat (partial resolve-into-concrete schema) (:implemented-by (interfaces type-name))))
+    :union (set (mapcat (partial resolve-into-concrete schema) (:union-types (unions type-name))))
+    #{type-name}))
 
-    (= :union (type->kind type-name))
-    (do
-      (assert (:__typename base-schema) "Unions Types Require __typename on query")
-      (->> (apply s/enum (:union-types (get unions type-name)))
-           (assoc base-schema :__typename)))
+(defn- type-condition->concrete-types
+  [schema type-condition]
+  (set (mapcat (partial resolve-into-concrete schema) type-condition)))
 
-    :else
-    (if (:__typename base-schema)
-      (assoc base-schema :__typename (s/eq type-name))
-      base-schema)))
+(declare graphql-object->schema)
+
+(defn- type-name-condition [type-condition]
+  (comp type-condition :__typename))
 
 (defn- graphql-interfaces->schema
-  [analyzed-schema base-schema interface-types options]
+  [analyzed-schema base-schema interface-types {:keys [enum-fn] :as options}]
+  (assert (:__typename base-schema) "Unions and Interface Types Require __typename on query")
   (apply s/conditional
          (concat
           (mapcat
            (fn [[type-condition variation-type]]
-             [(comp type-condition :__typename)
-              (merge (reduce-schema analyzed-schema (:selection-set (first variation-type)) options)
-                     base-schema)])
+             [(type-name-condition type-condition)
+              (merge (graphql-object->schema analyzed-schema (first variation-type) base-schema options)
+                     base-schema
+                     {:__typename (enum-fn (type-condition->concrete-types analyzed-schema type-condition))})])
            interface-types)
           [:else base-schema])))
 
+(defn- add-type-name
+  [prismatic-schema analyzed-schema {:keys [type-name type-condition]} {:keys [enum-fn]}]
+  (if-let [interface-types (seq (type-condition->concrete-types analyzed-schema type-condition))]
+    (assoc prismatic-schema :__typename (enum-fn interface-types))
+    (if (:__typename prismatic-schema)
+      (assoc prismatic-schema :__typename (enum-fn (resolve-into-concrete analyzed-schema type-name)))
+      prismatic-schema)))
+
 (defn- graphql-object->schema
-  [analyzed-schema {:keys [type-name selection-set]} options]
-  (let [grouped-types   (group-by :type-condition selection-set)
-        base-schema     (-> (reduce-schema analyzed-schema (get grouped-types nil) options)
-                            (resolve-type-name type-name analyzed-schema))
-        interface-types (filter (comp some? key) grouped-types)]
-    (if (seq interface-types)
-      (graphql-interfaces->schema analyzed-schema base-schema interface-types options)
-      base-schema)))
+  [analyzed-schema {:keys [selection-set] :as operation} current-schema options]
+  (let [grouped-selections   (group-by :type-condition selection-set)
+        common-selections    (get grouped-selections nil)
+        common-schema        (-> (reduce-schema analyzed-schema common-selections options)
+                                 (->> (merge current-schema))
+                                 (add-type-name analyzed-schema operation options))
+        condition-selections (filter (comp some? key) grouped-selections)]
+    (if (seq condition-selections)
+      (graphql-interfaces->schema analyzed-schema common-schema condition-selections options)
+      common-schema)))
 
 (defn- reduce-schema
   [analyzed-schema selection-set options]
   (reduce
-   (fn [acc {:keys [field-type field-alias non-null? type-name] :as ca}]
-     (-> (case field-type
-           :object
-           (graphql-object->schema analyzed-schema ca options)
+   (fn [current-schema {:keys [field-type field-alias non-null? type-name] :as ca}]
+     (cond
+       (= field-type :object)
+       (-> (graphql-object->schema analyzed-schema ca current-schema options)
+           (nullability non-null?)
+           (->> (assoc current-schema (keyword field-alias))))
 
-           :list
-           (inner-list analyzed-schema ca options)
+       (= field-type :list)
+       (-> (inner-list analyzed-schema ca options)
+           (nullability non-null?)
+           (->> (assoc current-schema (keyword field-alias))))
 
-           :leaf
-           (graphql-type->schema-type analyzed-schema type-name options))
-         (nullability non-null?)
-         (->> (assoc acc (keyword field-alias)))))
-   {} selection-set))
+       (= field-type :leaf)
+       (-> (graphql-type->schema-type analyzed-schema type-name options)
+           (nullability non-null?)
+           (->> (assoc current-schema (keyword field-alias))))))
+   {}
+   selection-set))
 
 ;; Public API
 
