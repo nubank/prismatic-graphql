@@ -17,7 +17,8 @@
 
 (s/defschema Options
   {(s/optional-key :scalars) ScalarMapping
-   (s/optional-key :enum-fn) EnumBuilder})
+   (s/optional-key :enum-fn) EnumBuilder
+   (s/optional-key :loose?)  s/Bool})
 
 ;; Internal
 
@@ -60,7 +61,14 @@
 
 (defn- get-scalar-type
   [scalar-type {:keys [scalars]}]
-  (get (merge default-scalars scalars) (keyword scalar-type)))
+  (if-let [schema-type (get (merge default-scalars scalars) (keyword scalar-type))]
+    schema-type
+    (throw (ex-info (str "Scalar " scalar-type " do not have a mapped prismatic schema type.")
+                    {:scalar-type scalar-type}))))
+
+(defn- loose-schema
+  [schema]
+  (assoc schema s/Keyword s/Any))
 
 (defn- type->kind
   [analyzed-schema gql-type]
@@ -75,12 +83,13 @@
 
 (defn- get-input-type
   [analyzed-schema gql-type options]
-  (->> (get (:input-types analyzed-schema) gql-type)
-       :fields
-       (reduce
-        (fn [acc [k v]]
-          (assoc acc (keyword k) (type-description->schema-type analyzed-schema (:type-description v) options)))
-        {})))
+  (cond-> (->> (get (:input-types analyzed-schema) gql-type)
+               :fields
+               (reduce
+                (fn [acc [k v]]
+                  (assoc acc (keyword k) (type-description->schema-type analyzed-schema (:type-description v) options)))
+                {}))
+    (:loose? options) loose-schema))
 
 (defn- graphql-type->schema-type
   [analyzed-schema gql-type options]
@@ -94,15 +103,6 @@
     :enum
     (get-enum-type analyzed-schema gql-type options)))
 
-(declare reduce-schema)
-(defn- inner-list
-  [as {:keys [field-spec]} options]
-  (let [{:keys [selection-set non-null? type-name field-type]} field-spec]
-    [(nullability (if (= :object field-type)
-                    (reduce-schema as selection-set options)
-                    (graphql-type->schema-type as type-name options))
-                  non-null?)]))
-
 (defn- resolve-into-concrete
   [{:keys [type->kind unions interfaces] :as schema} type-name]
   (case (type->kind type-name)
@@ -114,10 +114,18 @@
   [schema type-condition]
   (set (mapcat (partial resolve-into-concrete schema) type-condition)))
 
-(declare graphql-object->schema)
-
 (defn- type-name-condition [type-condition]
   (comp type-condition :__typename))
+
+(declare reduce-schema)
+(declare graphql-object->schema)
+(defn- inner-list
+  [as {:keys [field-spec]} options]
+  (let [{:keys [non-null? type-name field-type] :as op} field-spec]
+    [(nullability (if (= :object field-type)
+                    (graphql-object->schema as op {} options)
+                    (graphql-type->schema-type as type-name options))
+                  non-null?)]))
 
 (defn- graphql-interfaces->schema
   [analyzed-schema base-schema interface-types {:keys [enum-fn] :as options}]
@@ -141,19 +149,7 @@
       (assoc prismatic-schema :__typename (enum-fn (resolve-into-concrete analyzed-schema type-name)))
       prismatic-schema)))
 
-(defn- graphql-object->schema
-  [analyzed-schema {:keys [selection-set] :as operation} current-schema options]
-  (let [grouped-selections   (group-by :type-condition selection-set)
-        common-selections    (get grouped-selections nil)
-        common-schema        (-> (reduce-schema analyzed-schema common-selections options)
-                                 (->> (merge current-schema))
-                                 (add-type-name analyzed-schema operation options))
-        condition-selections (filter (comp some? key) grouped-selections)]
-    (if (seq condition-selections)
-      (graphql-interfaces->schema analyzed-schema common-schema condition-selections options)
-      common-schema)))
-
-(defn- reduce-schema
+(defn- reduce-selections
   [analyzed-schema selection-set options]
   (reduce
    (fn [current-schema {:keys [field-type field-alias non-null? type-name] :as ca}]
@@ -175,10 +171,27 @@
    {}
    selection-set))
 
+(defn- base-object-schema
+  [analyzed-schema selections operation current-schema options]
+  (cond-> (-> (reduce-selections analyzed-schema selections options)
+              (->> (merge current-schema))
+              (add-type-name analyzed-schema operation options))
+    (:loose? options) loose-schema))
+
+(defn- graphql-object->schema
+  [analyzed-schema {:keys [selection-set] :as operation} current-schema options]
+  (let [grouped-selections   (group-by :type-condition selection-set)
+        common-selections    (get grouped-selections nil)
+        common-schema        (base-object-schema analyzed-schema common-selections operation current-schema options)
+        condition-selections (filter (comp some? key) grouped-selections)]
+    (if (seq condition-selections)
+      (graphql-interfaces->schema analyzed-schema common-schema condition-selections options)
+      common-schema)))
+
 ;; Public API
 
 (s/def default-options :- Options
-  {:enum-fn #(apply s/enum %)})
+  {:enum-fn #(apply s/enum (map keyword %))})
 
 (s/defn valid-schema? :- s/Bool
   "Returns true if the schema-string is a valid GraphQL Schema, false otherwise"
@@ -199,7 +212,9 @@
     type to be used. (this is required if your schema contains custom Scalars, they are going to be merged with the default ones)
 
    <:enum-fn> - A function that receives a set and should return a Prismatic Schema representing an enum made of the elements
-    present in the set provided. By default this uses the `s/enum` from Prismatic, can be used to provide a loose-enum implementation."
+    present in the set provided. By default this uses the `s/enum` from Prismatic, can be used to provide a loose-enum implementation.
+
+   <:loose?> - Allows for extra keys in the generated schemas"
   ([schema-string :- s/Str
     query-string :- s/Str]
    (query->data-schema schema-string query-string default-options))
@@ -211,7 +226,7 @@
      (with-redefs [alumbra.canonical.arguments/resolve-arguments (fn [_ _ _] nil)
                    alumbra.canonical.variables/resolve-variables (fn [opts _] opts)]
        (as-> (analyzer/canonicalize-operation schema query) $
-             (reduce-schema schema (:selection-set $) (merge default-options options)))))))
+             (graphql-object->schema schema $ {} (merge default-options options)))))))
 
 (s/defn query->variables-schema :- Schema
   "Receives a string containing a GraphQL Schema in SDL and a GraphQL Query String and returns the Prismatic Schema of the
@@ -222,7 +237,9 @@
     type to be used. (this is required if your schema contains custom Scalars, they are going to be merged with the default ones)
 
    <:enum-fn> - A function that receives a set and should return a Prismatic Schema representing an enum made of the elements
-    present in the set provided. By default this uses the `s/enum` from Prismatic, can be used to provide a loose-enum implementation."
+    present in the set provided. By default this uses the `s/enum` from Prismatic, can be used to provide a loose-enum implementation.
+
+   <:loose?> - Allows for extra keys in the generated schemas"
   ([schema-string :- s/Str
     query-string :- s/Str]
    (query->variables-schema schema-string query-string default-options))
@@ -231,14 +248,16 @@
     options :- Options]
    (let [schema (parse-schema schema-string)
          query  (parse-query query-string)]
-     (->> query
-          :alumbra/operations
-          first
-          :alumbra/variables
-          (reduce
-           (fn [acc var]
-             (let [type-name (-> var :alumbra/type :alumbra/type-name)
-                   non-null? (-> var :alumbra/type :alumbra/non-null?)]
-               (->> (nullability (graphql-type->schema-type schema type-name (merge default-options options)) non-null?)
-                    (assoc acc (keyword (:alumbra/variable-name var))))))
-           {})))))
+     (cond->
+       (->> query
+            :alumbra/operations
+            first
+            :alumbra/variables
+            (reduce
+             (fn [acc var]
+               (let [type-name (-> var :alumbra/type :alumbra/type-name)
+                     non-null? (-> var :alumbra/type :alumbra/non-null?)]
+                 (->> (nullability (graphql-type->schema-type schema type-name (merge default-options options)) non-null?)
+                      (assoc acc (keyword (:alumbra/variable-name var))))))
+             {}))
+       (:loose? options) loose-schema))))

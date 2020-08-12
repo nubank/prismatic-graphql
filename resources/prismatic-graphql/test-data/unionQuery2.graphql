@@ -1,0 +1,14 @@
+query UnionQuery2 {
+  allThings {
+    __typename
+    ... on Person {
+      name
+      ... on Employee {
+        position
+      }
+    }
+    ... on Car {
+      model
+    }
+  }
+}

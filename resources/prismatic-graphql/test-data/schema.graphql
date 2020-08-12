@@ -59,6 +59,7 @@ type Query {
   person(id: String): Person!
   employee(id: String!): Employee!
   something: Something!
+  allThings: [Something!]!
   task: Task!
   car: Car!
 }
