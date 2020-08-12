@@ -159,7 +159,7 @@
    (fn [current-schema {:keys [field-type field-alias non-null? type-name] :as ca}]
      (cond
        (= field-type :object)
-       (-> (graphql-object->schema analyzed-schema ca current-schema options)
+       (-> (graphql-object->schema analyzed-schema ca {} options)
            (nullability non-null?)
            (->> (assoc current-schema (keyword field-alias))))
 

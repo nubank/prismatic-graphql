@@ -81,6 +81,61 @@
       (is (thrown-with-msg? AssertionError #"field not in scope: wololo"
                             (core/query->data-schema schema (load-query :invalidQuery) options))))))
 
+(deftest conditional-schemas-test
+  (testing "on simple interface schemas"
+    (let [schema-checker (s/checker (core/query->data-schema schema (load-query :testQuery) options))]
+      (testing "we can coerce valid values"
+        (is (nil? (schema-checker {:customer {:id "123" :name "test"}
+                                   :person   {:__typename "Employee"
+                                              :name       "test"
+                                              :position   "position"}})))
+        (is (nil? (schema-checker {:customer {:id "123" :name "test"}
+                                   :person   {:__typename "Customer"
+                                              :name       "test"}}))))
+
+      (testing "wrong values are not accepted"
+        (is (= {:person {:position 'disallowed-key}}
+               (schema-checker {:customer {:id "123" :name "test"}
+                                :person   {:__typename "Customer"
+                                           :name       "test"
+                                           :position   "position"}})))
+        (is (= {:person {:position 'missing-required-key}}
+               (schema-checker {:customer {:id "123" :name "test"}
+                                :person   {:__typename "Employee"
+                                           :name       "test"}}))))))
+
+  (testing "on complex union and interface schemas"
+    (let [schema-checker (s/checker (core/query->data-schema schema (load-query :unionQuery) options))]
+      (testing "we can coerce valid values"
+        (is (nil? (schema-checker {:something {:__typename "Car"
+                                               :model      "corsa"}})))
+        (is (nil? (schema-checker {:something {:__typename "Customer"
+                                               :name       "jonas"}})))
+        (is (nil? (schema-checker {:something {:__typename "Partner"
+                                               :name       "jonas"}})))
+        (is (nil? (schema-checker {:something {:__typename "Employee"
+                                               :position   "test"
+                                               :name       "jonas"}}))))
+
+      (testing "wrong values are not accepted"
+        (is (= {:something {:model 'disallowed-key
+                            :name  'missing-required-key}}
+               (schema-checker {:something {:__typename "Customer"
+                                            :model      "corsa"}})))
+        (is (= {:something {:model 'missing-required-key
+                            :name  'disallowed-key}}
+               (schema-checker {:something {:__typename "Car"
+                                            :name       "jonas"}})))
+        (is (= {:something {:model    'disallowed-key
+                            :name     'missing-required-key
+                            :position 'missing-required-key}}
+               (schema-checker {:something {:__typename "Employee"
+                                            :model      "corsa"}})))
+        (is (= {:something {:position 'disallowed-key}}
+               (schema-checker {:something {:__typename "Customer"
+                                            :name       "jonas"
+                                            :position   "test"}})))))))
+
 (deftest query->variables-schema-test
   (testing "when creating variables prismatic schemas from GraphQL Query + Schema"
     (testing "simple query"
