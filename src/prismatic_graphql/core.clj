@@ -2,7 +2,8 @@
   (:require [schema.core :as s]
             [alumbra.analyzer :as analyzer]
             [alumbra.parser :as parser]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [clojure.set :as set])
   (:import [java.time LocalDateTime LocalDate LocalTime]))
 
 ;; Type Definitions
@@ -115,7 +116,7 @@
   (set (mapcat (partial resolve-into-concrete schema) type-condition)))
 
 (defn- type-name-condition [type-condition]
-  (comp type-condition :__typename))
+  (comp type-condition name :__typename))
 
 (declare reduce-schema)
 (declare graphql-object->schema)
@@ -139,7 +140,7 @@
                      base-schema
                      {:__typename (enum-fn (type-condition->concrete-types analyzed-schema type-condition))})])
            interface-types)
-          [:else base-schema])))
+          [:else (update base-schema :__typename #(enum-fn (set/difference (set (:vs %)) (set (mapcat key interface-types)))))])))
 
 (defn- add-type-name
   [prismatic-schema analyzed-schema {:keys [type-name type-condition]} {:keys [enum-fn]}]
@@ -191,7 +192,9 @@
 ;; Public API
 
 (s/def default-options :- Options
-  {:enum-fn #(apply s/enum (map keyword %))})
+  {:enum-fn #(if (seq %)
+               (apply s/enum %)
+               (s/eq nil))})
 
 (s/defn valid-schema? :- s/Bool
   "Returns true if the schema-string is a valid GraphQL Schema, false otherwise"
