@@ -1,4 +1,4 @@
-(defproject nubank/prismatic-graphql "0.1.2"
+(defproject nubank/prismatic-graphql "0.1.3"
   :description "Clojure library for creating Prismatic Schemas from GraphQL Queries"
   :url "https://github.com/nubank/prismatic-graphql"
   :license {:name "Apache 2.0"

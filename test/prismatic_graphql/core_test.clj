@@ -115,7 +115,8 @@
                                                :name       "jonas"}})))
         (is (nil? (schema-checker {:something {:__typename "Employee"
                                                :position   "test"
-                                               :name       "jonas"}}))))
+                                               :name       "jonas"}})))
+        (is (nil? (schema-checker {:something {:__typename nil}}))))
 
       (testing "wrong values are not accepted"
         (is (= {:something {:model 'disallowed-key

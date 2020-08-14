@@ -116,7 +116,7 @@
   (set (mapcat (partial resolve-into-concrete schema) type-condition)))
 
 (defn- type-name-condition [type-condition]
-  (comp type-condition name :__typename))
+  #(some-> % :__typename name type-condition))
 
 (declare reduce-schema)
 (declare graphql-object->schema)
